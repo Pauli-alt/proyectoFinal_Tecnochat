@@ -141,15 +141,17 @@ class IceClient {
         await this._ensureConnected();
         const bytes = dataBytes || new Uint8Array();
         return this._invokeBool(this.chatPrx, "sendAudio", (ostr) => {
+            // orden de writes debe coincidir con Slice
             ostr.writeString(from ?? "");
             ostr.writeString(to ?? "");
             ostr.writeBool(!!isGroup);
             ostr.writeString(filename ?? "audio.webm");
+            // ByteSeq para audio crudo
             Ice.ByteSeqHelper.write(ostr, bytes);
         });
     }
 
-    // ========== Helpers ==========
+    //helpers
     _stringToProxy(identity) {
         const proxyStr = `${identity}:default -h ${this.host} -p ${this.port}`;
         return this.communicator.stringToProxy(proxyStr);

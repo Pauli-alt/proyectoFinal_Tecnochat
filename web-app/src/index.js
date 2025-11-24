@@ -124,26 +124,19 @@ async function sendAudioNote(blob) {
     }
 
     try {
-        const arrayBuffer = await blob.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-        const filename = `audio_${Date.now()}.webm`;
+        // FormData porque el proxy usa multer
+        const formData = new FormData();
+        formData.append("to", recipient);
+        formData.append("from", currentUser);
+        formData.append("isGroup", String(type === "group"));
+        // nombre exacto "audio"; si cambia, req.file llega undefined
+        formData.append("audio", blob, `audio_${Date.now()}.webm`);
 
         const res = await fetch(`${PROXY_URL}/api/audio/upload`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                to: recipient,
-                from: currentUser,
-                isGroup: type === 'group',
-                filename,
-                data: base64
-            })
+            method: "POST",
+            body: formData
         });
+
         const result = await res.json();
         if (result.success) {
             showStatus(`Nota de audio enviada a ${recipient}`, 'success', statusDiv);
@@ -154,6 +147,7 @@ async function sendAudioNote(blob) {
     } catch (err) {
         showStatus('Error enviando audio: ' + err.message, 'error', statusDiv);
     }
+
 }
 
 function setUsername() {
@@ -245,7 +239,7 @@ document.getElementById('messageType').addEventListener('change', function () {
     }
 });
 
-// Cambiar etiquetas en historial
+// cambiar etiquetas en historial
 function toggleHistoryInput() {
     const type = document.getElementById('historyType').value;
     const label = document.getElementById('historyLabel');
@@ -260,7 +254,7 @@ function toggleHistoryInput() {
     }
 }
 
-// Enviar mensaje
+// enviar mensaje
 async function sendMessage(e) {
     const type = document.getElementById('messageType').value;
     const recipient = type === 'private'
@@ -308,7 +302,7 @@ async function sendMessage(e) {
     }
 }
 
-// Crear grupo
+// crear grupo
 async function createGroup() {
     const groupName = document.getElementById('groupName').value;
     const groupMembers = document.getElementById('groupMembers').value;
@@ -354,7 +348,7 @@ async function createGroup() {
     }
 }
 
-// Cargar historial
+// cargar historial
 async function loadHistory() {
     const type = document.getElementById('historyType').value;
     const input = document.getElementById('historySelect').value;
@@ -394,7 +388,7 @@ async function loadHistory() {
             cleaned.forEach(item => {
                 const isAudio = item.includes('[AUDIO:');
                 if (isAudio) {
-                    // Espera entradas tipo "[AUDIO: <filename>]"
+                    // espera entradas tipo "[AUDIO: <filename>]"
                     const match = item.match(/\[AUDIO:\s*([^\]]+)\]/i);
                     const filename = match ? match[1].trim() : null;
                     html += `<div class="message audio">${item}`;
@@ -415,7 +409,7 @@ async function loadHistory() {
     }
 }
 
-// Cargar feed de mensajes recientes para el chat actual
+// cargar feed de mensajes recientes para el chat actual
 async function loadMessageFeed() {
     const feed = document.getElementById('messageFeed');
     const type = document.getElementById('messageType')?.value || 'private';
@@ -464,7 +458,7 @@ async function loadMessageFeed() {
     }
 }
 
-// Cargar usuarios conectados
+// cargar usuarios conectados
 async function loadOnlineUsers() {
     const container = document.getElementById('usersContainer');
 
@@ -617,7 +611,7 @@ async function fetchGroupsForHistory() {
     }
 }
 
-// Miembros de grupo
+// miembros de grupo
 async function loadGroupMembers() {
     const group = document.getElementById('groupName').value;
     const statusDiv = document.getElementById('groupStatus');
@@ -667,7 +661,7 @@ async function loadGroupsList() {
     }
 }
 
-// ==== Señalización WebRTC vía proxy/Ice ====
+//señalización WebRTC vía proxy/Ice
 async function sendRtcSignal(to, type, data) {
     if (!currentUser || !to || !type) return;
     await fetch(`${PROXY_URL}/api/webrtc/signal`, {
@@ -731,7 +725,7 @@ function attachRemoteStream(stream) {
 
 function startRing(from) {
     if (!ringAudio) {
-        // coloca ring.mp3 en la raíz de web-app o en /public y usa esta ruta
+        // coloca ring.mp3 en la raíz de web-app
         ringAudio = new Audio('./ring.mp3');
         ringAudio.loop = true;
     }
@@ -1034,16 +1028,16 @@ async function endCallUser(user) {
     }
 }
 
-// Mostrar estado
+// mostrar estado
 function showStatus(message, type, container) {
     container.innerHTML = `<div class="status ${type}">${message}</div>`;
     setTimeout(() => {
         container.innerHTML = '';
     }, 5000);
 }
-// Agregar event listeners para navegación
+// agregar event listeners para navegación
 document.addEventListener('DOMContentLoaded', function () {
-    // Limpia estado previo para evitar sesiones obsoletas
+    // limpia estado previo para evitar sesiones obsoletas
     localStorage.clear();
     currentUser = '';
     knownGroups = [];

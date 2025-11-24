@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import IceClient from './IceClient.js';
+import multer from "multer";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +13,11 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const ICE_HOST = process.env.ICE_HOST || 'localhost';
 const ICE_PORT = parseInt(process.env.ICE_PORT || '10000', 10);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
 
 app.use(cors());
 app.use(express.json());
@@ -83,6 +90,7 @@ app.post('/api/logout', async (req, res) => {
 });
 
 // 2. ENVIAR MENSAJE PRIVADO
+//  valida (to,message) antes de Ice para evitar errores
 app.post('/api/messages/private', async (req, res) => {
     try {
         const { to, message, from } = req.body;
@@ -124,6 +132,7 @@ app.post('/api/messages/private', async (req, res) => {
 });
 
 // 3. ENVIAR MENSAJE A GRUPO
+// body usa {group,message,from}; si group falta se responde 400
 app.post('/api/messages/group', async (req, res) => {
     try {
         const { group, message, from } = req.body;
@@ -392,7 +401,7 @@ app.get('/api/groups', async (req, res) => {
     }
 });
 
-// 8. enpoint para obtenr historial de los chats privados 
+// enpoint para obtenr historial de los chats privados 
 app.get('/api/history/private', async (req, res) => {
     try {
         const { user, requester } = req.query;
@@ -434,33 +443,51 @@ app.get('/api/history/private', async (req, res) => {
     }
 });
 
-// 8b. Subir nota de audio (base64) para guardarla en backend
-app.post('/api/audio/upload', async (req, res) => {
-    try {
-        const { to, from, isGroup, filename, data } = req.body;
-        const sender = from || req.headers['x-username'] || 'WebCliente';
+// audios usando formdata y multer
+app.post("/api/audio/upload", upload.single("audio"), async (req, res) => {
+  try {
+    const { to, from, isGroup } = req.body;
+    const sender = from || req.headers["x-username"] || "WebCliente";
 
-        if (!to || !data) {
-            return res.status(400).json({ success: false, error: 'Parámetros requeridos: to, data' });
-        }
-
-        const buffer = Buffer.from(data, 'base64');
-        const ok = await iceClient.sendAudio(sender, to, !!isGroup, filename || 'audio.webm', new Uint8Array(buffer));
-        res.json({ success: ok });
-    } catch (error) {
-        console.error(' Error subiendo nota de audio:', error);
-        res.status(500).json({ success: false, error: error.message || 'No se pudo subir audio' });
+    // recibe multipart con campo "audio" (multer)
+    if (!to || !req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "Parámetros requeridos: to, audio"
+      });
     }
+
+    // buffer -> Uint8Array para ByteSeq ICE
+    const bytes = new Uint8Array(req.file.buffer);
+    const filename = req.file.originalname || "audio.webm";
+
+    const ok = await iceClient.sendAudio(
+      sender,
+      to,
+      isGroup === "true" || isGroup === true,
+      filename,
+      bytes
+    );
+
+    res.json({ success: ok });
+  } catch (error) {
+    console.error(" Error subiendo nota de audio:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "No se pudo subir audio"
+    });
+  }
 });
 
-// 8c. Descargar/servir audio histórico
+
+// Descargar/servir audio histórico
 app.get('/api/audio/download', async (req, res) => {
     try {
         const { file } = req.query;
         if (!file) {
             return res.status(400).json({ success: false, error: 'file requerido' });
         }
-        // Archivos se guardan en backend-java/audio_history (ruta absoluta segura)
+        // archivos se guardan en backend-java/audio_history
         const audioPath = path.join(__dirname, '..', '..', 'backend-java', 'audio_history', file);
         return res.sendFile(audioPath, (err) => {
             if (err) {
@@ -476,7 +503,7 @@ app.get('/api/audio/download', async (req, res) => {
     }
 });
 
-// 9. Historial del grupo
+// historial del grupo
 app.get('/api/history/group', async (req, res) => {
     try {
         const { group } = req.query;
@@ -513,7 +540,7 @@ app.get('/api/history/group', async (req, res) => {
     }
 });
 
-// 7. ENDPOINT (Health Check)
+
 app.get('/api/health', (req, res) => {
     res.json({
         success: true,
@@ -527,7 +554,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// 8. Este es el manejo de errores global 
+// es el manejo de errores global 
 app.use((err, req, res, next) => {
     console.error(' Error no manejado:', err);
     res.status(500).json({
